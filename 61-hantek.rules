@@ -1,0 +1,2 @@
+# Hantek 2D42
+SUBSYSTEM=="usb", ACTION=="add", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="2d42", TAG+="uaccess", TAG+="udev-acl"
