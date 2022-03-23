@@ -1,7 +1,6 @@
 use druid::text::{Formatter, Selection, Validation, ValidationError};
-use druid::Widget;
 use druid::widget::TextBox;
-use log::info;
+use druid::Widget;
 use thiserror::Error;
 
 pub struct FloatFormatter {
@@ -63,9 +62,13 @@ enum FloatValidationError {
 fn validate_f32(v: f32, min: Option<f32>, max: Option<f32>) -> Validation {
     if v.is_nan() {
         FloatValidationError::ValueViolation.into()
-    } else if v.is_infinite() && v.is_sign_negative() || min.is_some() && !min.unwrap().is_infinite() && v < min.unwrap() {
+    } else if v.is_infinite() && v.is_sign_negative()
+        || min.is_some() && !min.unwrap().is_infinite() && v < min.unwrap()
+    {
         FloatValidationError::MinViolation.into()
-    } else if v.is_infinite() && v.is_sign_positive() || max.is_some() && !max.unwrap().is_infinite() && v > max.unwrap() {
+    } else if v.is_infinite() && v.is_sign_positive()
+        || max.is_some() && !max.unwrap().is_infinite() && v > max.unwrap()
+    {
         FloatValidationError::MaxViolation.into()
     } else {
         Validation::success()

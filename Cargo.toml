@@ -1,7 +1,7 @@
 [package]
 name = "hanteker_gui"
 authors = ["Koosha Hosseiny"]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 resolver = "2"
 
@@ -15,8 +15,8 @@ strum_macros = "0.24"
 
 libusb = "0.3"
 
-# hanteker_lib = "0.2.0"
-hanteker_lib = { path = "../hanteker/hanteker_lib", version = "0.2.0", features = ["gui"] }
+hanteker_lib = { version = "0.3.0", features = ["gui"] }
+# hanteker_lib = { path = "../hanteker/hanteker_lib", version = "0.3.0", features = ["gui"] }
 
 #tracing-subscriber = "0.3"
 #eframe = "0.17"
@@ -26,22 +26,9 @@ hanteker_lib = { path = "../hanteker/hanteker_lib", version = "0.2.0", features 
 druid-widget-nursery = { git = "https://github.com/linebender/druid-widget-nursery" }
 # plotters-druid = "0.2"
 
-# fltk = { version = "1.3", features = ["fltk-bundled"] }
-
-#wasm-bindgen = "0.2.0"
-# iced = "0.3.0"
-# iced = { git = "https://github.com/iced-rs/iced" }
-#iced = { path = "./iced" }
-#iced_core = { version = "0.4", path = "./iced/core" }
-#iced_futures = { version = "0.3", path = "./iced/futures" }
-#iced_winit = { version = "0.3", path = "./iced/winit" }
-#iced_wgpu = { version = "0.4", path = "./iced/wgpu" }
-#iced_lazy = { path = "./iced/lazy" }
-#iced_native = { path = "./iced/native" }
-
-# [patch.crates-io.druid]
-# git = "https://github.com/linebender/druid"
-# rev = "fc05e965c85fced8720c655685e02478e0530e94"
+[patch.crates-io.druid]
+git = "https://github.com/linebender/druid"
+rev = "fc05e965c85fced8720c655685e02478e0530e94"
 
 [dependencies.druid]
 git = "https://github.com/linebender/druid"

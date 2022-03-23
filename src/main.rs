@@ -2,23 +2,23 @@
 #![windows_subsystem = "windows"]
 
 use std::collections::VecDeque;
-use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::Arc;
 
 use anyhow::bail;
-use druid::{AppLauncher, Data, UnitPoint, Widget, WidgetExt, WindowDesc};
 use druid::im::Vector;
 use druid::widget::{Button, CrossAxisAlignment, Flex, Label, MainAxisAlignment, Switch};
+use druid::{AppLauncher, Data, UnitPoint, Widget, WidgetExt, WindowDesc};
 use druid_widget_nursery::{DropdownSelect, WidgetExt as WidgetExtNursery};
 use hanteker_lib::device::cfg::*;
 use log::{debug, error, info, trace};
 use pretty_env_logger::formatted_builder;
 
-use crate::dev::{DevCommand, handler_thread};
-use crate::widget::{lens_of, t, tt};
+use crate::dev::{handler_thread, DevCommand};
 use crate::widget::f32_formatter::float_text_unrestricted;
 use crate::widget::label::{label, label_c, label_ct};
 use crate::widget::scope::ScopeGraph;
+use crate::widget::{lens_of, t, tt};
 
 mod dev;
 mod widget;
@@ -62,13 +62,14 @@ impl HantekState {
     fn get_messages(&self) -> String {
         // TODO make rev() on iter work.
         let len = self.messages.len();
-        let mut vec = self.messages
-                          .iter()
-                          .cloned()
-                          .zip((0..len).into_iter())
-                          .map(|(s, i)| format!("{}: {}", i, s))
-                          .intersperse("\n".to_string())
-                          .collect::<Vec<String>>();
+        let mut vec = self
+            .messages
+            .iter()
+            .cloned()
+            .zip((0..len).into_iter())
+            .map(|(s, i)| format!("{}: {}", i, s))
+            .intersperse("\n".to_string())
+            .collect::<Vec<String>>();
         vec.reverse();
         vec.into_iter().collect()
     }
@@ -308,9 +309,7 @@ impl HantekState {
     }
 
     fn set_coupling(&mut self, channel: usize, new_value: Coupling) {
-        self.cfg
-            .channel_coupling
-            .insert(channel, Some(new_value));
+        self.cfg.channel_coupling.insert(channel, Some(new_value));
     }
 
     // ------------
@@ -359,17 +358,14 @@ impl HantekState {
     }
 
     fn get_probe(&self, channel: usize) -> Probe {
-        self.cfg
-            .channel_probe[&channel]
+        self.cfg.channel_probe[&channel]
             .as_ref()
             .unwrap_or(&Probe::X1)
             .clone()
     }
 
     fn set_probe(&mut self, channel: usize, new_value: Probe) {
-        self.cfg
-            .channel_probe
-            .insert(channel, Some(new_value));
+        self.cfg.channel_probe.insert(channel, Some(new_value));
     }
 
     // ------------
@@ -425,9 +421,7 @@ impl HantekState {
     }
 
     fn set_scale0(&mut self, channel: usize, new_value: Scale) {
-        self.cfg
-            .channel_scale
-            .insert(channel, Some(new_value));
+        self.cfg.channel_scale.insert(channel, Some(new_value));
     }
 
     // ------------
@@ -452,11 +446,7 @@ impl HantekState {
         let offset = self.cfg.channel_offset[&channel].unwrap();
         debug!("UI => {}::{}", my_name, offset);
 
-        self.message(format!(
-            "setting offset={}, channel={}",
-            offset,
-            channel
-        ));
+        self.message(format!("setting offset={}, channel={}", offset, channel));
 
         self.tx.send(DevCommand::Offset(channel, offset)).unwrap();
         match self.rx.recv().unwrap() {
@@ -476,14 +466,11 @@ impl HantekState {
     }
 
     fn get_offset(&self, channel: usize) -> f32 {
-        self.cfg.channel_offset[&channel]
-            .unwrap_or(0.0f32)
+        self.cfg.channel_offset[&channel].unwrap_or(0.0f32)
     }
 
     fn set_offset(&mut self, channel: usize, new_value: f32) {
-        self.cfg
-            .channel_offset
-            .insert(channel, Some(new_value));
+        self.cfg.channel_offset.insert(channel, Some(new_value));
     }
 
     // ------------
@@ -693,9 +680,7 @@ impl HantekState {
     }
 
     fn get_time_offset(&self) -> f32 {
-        self.cfg
-            .time_offset
-            .unwrap_or(0.0)
+        self.cfg.time_offset.unwrap_or(0.0)
     }
 
     fn set_time_offset(&mut self, new_value: f32) {
@@ -744,9 +729,7 @@ impl HantekState {
     }
 
     fn get_trigger_source(&self) -> usize {
-        self.cfg
-            .trigger_source_channel
-            .unwrap_or(1usize)
+        self.cfg.trigger_source_channel.unwrap_or(1usize)
     }
 
     fn set_trigger_source(&mut self, new_value: usize) {
@@ -848,9 +831,7 @@ impl HantekState {
     }
 
     fn get_trigger_level(&self) -> f32 {
-        self.cfg
-            .trigger_level
-            .unwrap_or(0.0)
+        self.cfg.trigger_level.unwrap_or(0.0)
     }
 
     fn set_trigger_level(&mut self, new_value: f32) {
@@ -883,7 +864,10 @@ impl HantekState {
         let status = self.cfg.awg_running_status.as_ref().unwrap().clone();
         debug!("UI => {}::{}", my_name, status.my_to_string());
 
-        self.message(format!("setting awg_running_status={}", status.my_to_string()));
+        self.message(format!(
+            "setting awg_running_status={}",
+            status.my_to_string()
+        ));
 
         self.tx.send(DevCommand::AwgRunningStatus(status)).unwrap();
         match self.rx.recv().unwrap() {
@@ -952,9 +936,7 @@ impl HantekState {
     }
 
     fn get_awg_frequency(&self) -> f32 {
-        self.cfg
-            .awg_frequency
-            .unwrap_or(0.0)
+        self.cfg.awg_frequency.unwrap_or(0.0)
     }
 
     fn set_awg_frequency(&mut self, new_value: f32) {
@@ -1003,9 +985,7 @@ impl HantekState {
     }
 
     fn get_awg_amplitude(&self) -> f32 {
-        self.cfg
-            .awg_amplitude
-            .unwrap_or(0.0)
+        self.cfg.awg_amplitude.unwrap_or(0.0)
     }
 
     fn set_awg_amplitude(&mut self, new_value: f32) {
@@ -1110,9 +1090,7 @@ impl HantekState {
     }
 
     fn get_awg_offset(&self) -> f32 {
-        self.cfg
-            .awg_offset
-            .unwrap_or(0.0)
+        self.cfg.awg_offset.unwrap_or(0.0)
     }
 
     fn set_awg_offset(&mut self, new_value: f32) {
@@ -1161,9 +1139,7 @@ impl HantekState {
     }
 
     fn get_awg_duty_square(&self) -> f32 {
-        self.cfg
-            .awg_duty_square
-            .unwrap_or(0.0)
+        self.cfg.awg_duty_square.unwrap_or(0.0)
     }
 
     fn set_awg_duty_square(&mut self, new_value: f32) {
@@ -1212,9 +1188,7 @@ impl HantekState {
     }
 
     fn get_awg_duty_ramp(&self) -> f32 {
-        self.cfg
-            .awg_duty_ramp
-            .unwrap_or(0.0)
+        self.cfg.awg_duty_ramp.unwrap_or(0.0)
     }
 
     fn set_awg_duty_ramp(&mut self, new_value: f32) {
@@ -1522,10 +1496,12 @@ fn build_awg_panel() -> impl Widget<HantekState> {
             Switch::new()
                 .lens(lens_of(
                     |state: &HantekState| state.get_awg_running().is_start(),
-                    |state: &mut HantekState, new_value| state.set_awg_running(match new_value {
-                        true => RunningStatus::Start,
-                        false => RunningStatus::Stop,
-                    }),
+                    |state: &mut HantekState, new_value| {
+                        state.set_awg_running(match new_value {
+                            true => RunningStatus::Start,
+                            false => RunningStatus::Stop,
+                        })
+                    },
                 ))
                 .disabled_if(|state: &HantekState, _| state.is_awg_running_disabled())
                 .on_change(move |_, _, data_mut: &mut HantekState, _| data_mut.on_awg_running()),
@@ -1620,7 +1596,9 @@ fn build_awg_panel() -> impl Widget<HantekState> {
             float_text_unrestricted()
                 .lens(lens_of(
                     move |state: &HantekState| state.get_awg_duty_trap_high(),
-                    move |state: &mut HantekState, new_value| state.set_awg_duty_trap_high(new_value),
+                    move |state: &mut HantekState, new_value| {
+                        state.set_awg_duty_trap_high(new_value)
+                    },
                 ))
                 .disabled_if(|state: &HantekState, _| state.is_awg_duty_trap_disabled())
                 .on_change(move |_, _, data_mut: &mut HantekState, _| data_mut.on_awg_duty_trap()),
@@ -1633,7 +1611,9 @@ fn build_awg_panel() -> impl Widget<HantekState> {
             float_text_unrestricted()
                 .lens(lens_of(
                     move |state: &HantekState| state.get_awg_duty_trap_low(),
-                    move |state: &mut HantekState, new_value| state.set_awg_duty_trap_low(new_value),
+                    move |state: &mut HantekState, new_value| {
+                        state.set_awg_duty_trap_low(new_value)
+                    },
                 ))
                 .disabled_if(|state: &HantekState, _| state.is_awg_duty_trap_disabled())
                 .on_change(move |_, _, data_mut: &mut HantekState, _| data_mut.on_awg_duty_trap()),
@@ -1646,7 +1626,9 @@ fn build_awg_panel() -> impl Widget<HantekState> {
             float_text_unrestricted()
                 .lens(lens_of(
                     move |state: &HantekState| state.get_awg_duty_trap_rise(),
-                    move |state: &mut HantekState, new_value| state.set_awg_duty_trap_rise(new_value),
+                    move |state: &mut HantekState, new_value| {
+                        state.set_awg_duty_trap_rise(new_value)
+                    },
                 ))
                 .disabled_if(|state: &HantekState, _| state.is_awg_duty_trap_disabled())
                 .on_change(move |_, _, data_mut: &mut HantekState, _| data_mut.on_awg_duty_trap()),
@@ -1744,9 +1726,9 @@ pub fn main() -> anyhow::Result<()> {
         build_ui(),
         // .debug_paint_layout()
     )
-        .with_min_size((1024., 740.))
-        .window_size((1724., 740.))
-        .title(tt("window-title", "Hantek"));
+    .with_min_size((1024., 740.))
+    .window_size((1724., 740.))
+    .title(tt("window-title", "Hantek"));
 
     let state = HantekState::new(rx, Arc::new(tx));
 

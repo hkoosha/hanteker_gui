@@ -73,7 +73,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                             "failed to claim device: {}",
                                             error.my_to_string()
                                         )))
-                                          .unwrap_or_else(|_| exit());
+                                        .unwrap_or_else(|_| exit());
                                     }
                                 }
                             }
@@ -83,7 +83,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     "failed to open device: {}",
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                         continue;
@@ -109,7 +109,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                 let device = match &mut device {
                     None => {
                         tx.send(Err("not connected".to_string()))
-                          .unwrap_or_else(|_| exit());
+                            .unwrap_or_else(|_| exit());
                         continue;
                     }
                     Some(device) => device,
@@ -145,7 +145,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     channel,
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -161,7 +161,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     probe.my_to_string(),
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -177,7 +177,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     scale.my_to_string(),
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -193,7 +193,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     offset,
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -212,7 +212,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     channel,
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -227,7 +227,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     time_scale.my_to_string(),
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -242,7 +242,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     offset,
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -257,7 +257,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     channel,
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -271,7 +271,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                 mode.my_to_string(),
                                 error.my_to_string()
                             )))
-                              .unwrap_or_else(|_| exit());
+                            .unwrap_or_else(|_| exit());
                         }
                     },
                     DevCommand::TriggerLevel(level) => {
@@ -285,7 +285,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     level,
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -303,7 +303,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     "failed to change running status, error={}",
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -321,7 +321,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     "failed to change awg running status, error={}",
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -335,7 +335,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     "failed to set awg frequency, error={}",
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -349,7 +349,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     "failed to set awg amplitude, error={}",
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -362,7 +362,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                 "failed to set awg type, error={}",
                                 error.my_to_string()
                             )))
-                              .unwrap_or_else(|_| exit());
+                            .unwrap_or_else(|_| exit());
                         }
                     },
                     DevCommand::AwgOffset(offset) => match device.set_awg_offset(offset) {
@@ -374,7 +374,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                 "failed to set awg offset, error={}",
                                 error.my_to_string()
                             )))
-                              .unwrap_or_else(|_| exit());
+                            .unwrap_or_else(|_| exit());
                         }
                     },
                     DevCommand::AwgDutySquare(duty_square) => {
@@ -387,11 +387,12 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     "failed to set awg duty::square, error={}",
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
-                    DevCommand::AwgDutyRamp(duty_ramp) => match device.set_awg_duty_ramp(duty_ramp) {
+                    DevCommand::AwgDutyRamp(duty_ramp) => match device.set_awg_duty_ramp(duty_ramp)
+                    {
                         Ok(_) => {
                             tx.send(Ok(())).unwrap_or_else(|_| exit());
                         }
@@ -400,7 +401,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                 "failed to set awg duty::ramp, error={}",
                                 error.my_to_string()
                             )))
-                              .unwrap_or_else(|_| exit());
+                            .unwrap_or_else(|_| exit());
                         }
                     },
                     DevCommand::AwgDutyTrap(high, low, rise) => {
@@ -413,7 +414,7 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                                     "failed to set awg duty::trap, error={}",
                                     error.my_to_string()
                                 )))
-                                  .unwrap_or_else(|_| exit());
+                                .unwrap_or_else(|_| exit());
                             }
                         }
                     }
