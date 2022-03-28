@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 
 use hanteker_lib::device::cfg::{
-    AwgType, Coupling, Probe, RunningStatus, Scale, TimeScale, TriggerMode,
+    AwgType, Coupling, DeviceFunction, Probe, RunningStatus, Scale, TimeScale, TriggerMode,
 };
 use hanteker_lib::models::hantek2d42::Hantek2D42;
 
@@ -21,7 +21,11 @@ fn exit_err(message: String) -> ! {
 pub(crate) enum DevCommand {
     Connect,
     Disconnect,
+
+    DeviceFunction(DeviceFunction),
+
     ScopeRunning(RunningStatus),
+
     ChannelEnable(usize, bool),
     Coupling(usize, Coupling),
     Probe(usize, Probe),
@@ -412,6 +416,20 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                             Err(error) => {
                                 tx.send(Err(format!(
                                     "failed to set awg duty::trap, error={}",
+                                    error.my_to_string()
+                                )))
+                                .unwrap_or_else(|_| exit());
+                            }
+                        }
+                    }
+                    DevCommand::DeviceFunction(device_function) => {
+                        match device.set_device_function(device_function) {
+                            Ok(_) => {
+                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                            }
+                            Err(error) => {
+                                tx.send(Err(format!(
+                                    "failed to set device_function, error={}",
                                     error.my_to_string()
                                 )))
                                 .unwrap_or_else(|_| exit());

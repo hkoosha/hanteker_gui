@@ -192,12 +192,70 @@ impl HantekState {
 
     // ------------
 
+    fn on_device_function(&mut self) {
+        let _err = self.send_device_function();
+    }
+
+    fn send_device_function(&mut self) -> anyhow::Result<()> {
+        let my_name = format!("send_device_function()");
+        if self.initializing {
+            trace!("UI => {}, SKIPPED/INIT", my_name);
+            return Ok(());
+        } else if !self.is_connected() {
+            self.message("not connected");
+            error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
+            bail!("not connected");
+        } else {
+            trace!("UI => {}", my_name);
+        }
+
+        let device_function = self.cfg.device_function.as_ref().unwrap().clone();
+        debug!("UI => {}::{}", my_name, device_function.my_to_string());
+
+        self.message(format!(
+            "setting device_function={}",
+            device_function.my_to_string(),
+        ));
+
+        self.tx
+            .send(DevCommand::DeviceFunction(device_function))
+            .unwrap();
+        match self.rx.recv().unwrap() {
+            Ok(_) => {
+                self.message("device function set");
+                Ok(())
+            }
+            Err(error) => {
+                self.message(error.clone());
+                bail!(error);
+            }
+        }
+    }
+
+    fn is_device_function_disabled(&self) -> bool {
+        !self.is_connected() || self.cfg.device_function.is_none()
+    }
+
+    fn get_device_function(&self) -> DeviceFunction {
+        self.cfg
+            .device_function
+            .as_ref()
+            .unwrap_or(&DeviceFunction::Scope)
+            .clone()
+    }
+
+    fn set_device_function(&mut self, new_value: DeviceFunction) {
+        self.cfg.device_function = Some(new_value);
+    }
+
+    // ------------
+
     fn on_running(&mut self) {
         let _err = self.send_running();
     }
 
     fn send_running(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_running()";
+        let my_name = "send_running()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -258,7 +316,7 @@ impl HantekState {
     }
 
     fn send_coupling(&mut self, channel: usize) -> anyhow::Result<()> {
-        let my_name = format!("on_coupling(channel={})", channel);
+        let my_name = format!("send_coupling(channel={})", channel);
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -319,7 +377,7 @@ impl HantekState {
     }
 
     fn send_probe(&mut self, channel: usize) -> anyhow::Result<()> {
-        let my_name = format!("on_probe(channel={})", channel);
+        let my_name = format!("send_probe(channel={})", channel);
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -375,7 +433,7 @@ impl HantekState {
     }
 
     fn send_scale(&mut self, channel: usize) -> anyhow::Result<()> {
-        let my_name = format!("on_scale(channel={})", channel);
+        let my_name = format!("send_scale(channel={})", channel);
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -431,7 +489,7 @@ impl HantekState {
     }
 
     fn send_offset(&mut self, channel: usize) -> anyhow::Result<()> {
-        let my_name = format!("on_offset(channel={})", channel);
+        let my_name = format!("send_offset(channel={})", channel);
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -480,7 +538,7 @@ impl HantekState {
     }
 
     fn send_channel_enable(&mut self, channel: usize) -> anyhow::Result<()> {
-        let my_name = format!("on_channel_enable(channel={})", channel);
+        let my_name = format!("send_channel_enable(channel={})", channel);
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -538,7 +596,7 @@ impl HantekState {
     }
 
     fn send_bw_limit(&mut self, channel: usize) -> anyhow::Result<()> {
-        let my_name = format!("on_bw_limit(channel={})", channel);
+        let my_name = format!("send_bw_limit(channel={})", channel);
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -596,7 +654,7 @@ impl HantekState {
     }
 
     fn send_time_scale(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_time_scale()";
+        let my_name = "send_time_scale()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -649,7 +707,7 @@ impl HantekState {
     }
 
     fn send_time_offset(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_time_offset()";
+        let my_name = "send_time_offset()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -698,7 +756,7 @@ impl HantekState {
     }
 
     fn send_trigger_source(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_trigger_source()";
+        let my_name = "send_trigger_source()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -747,7 +805,7 @@ impl HantekState {
     }
 
     fn send_trigger_mode(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_trigger_mode()";
+        let my_name = "send_trigger_mode()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -800,7 +858,7 @@ impl HantekState {
     }
 
     fn send_trigger_level(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_trigger_level()";
+        let my_name = "send_trigger_level()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -849,7 +907,7 @@ impl HantekState {
     }
 
     fn send_awg_running(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_awg_running()";
+        let my_name = "send_awg_running()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -905,7 +963,7 @@ impl HantekState {
     }
 
     fn send_awg_frequency(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_awg_frequency()";
+        let my_name = "send_awg_frequency()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -954,7 +1012,7 @@ impl HantekState {
     }
 
     fn send_awg_amplitude(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_awg_amplitude()";
+        let my_name = "send_awg_amplitude()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -1003,7 +1061,7 @@ impl HantekState {
     }
 
     fn send_awg_type(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_awg_type()";
+        let my_name = "send_awg_type()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -1059,7 +1117,7 @@ impl HantekState {
     }
 
     fn send_awg_offset(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_awg_offset()";
+        let my_name = "send_awg_offset()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -1108,7 +1166,7 @@ impl HantekState {
     }
 
     fn send_awg_duty_square(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_awg_duty_square()";
+        let my_name = "send_awg_duty_square()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -1157,7 +1215,7 @@ impl HantekState {
     }
 
     fn send_awg_duty_ramp(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_awg_duty_ramp()";
+        let my_name = "send_awg_duty_ramp()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -1206,7 +1264,7 @@ impl HantekState {
     }
 
     fn send_awg_duty_trap(&mut self) -> anyhow::Result<()> {
-        let my_name = "on_awg_duty_trap()";
+        let my_name = "send_awg_duty_trap()";
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
@@ -1303,10 +1361,26 @@ fn build_connect_panel() -> impl Widget<HantekState> {
         .on_click(|_, state: &mut HantekState, _| state.disconnect())
         .disabled_if(|state: &HantekState, _| !state.is_connected());
 
-    Flex::row()
-        .with_flex_child(connect_button, 1.0)
-        .with_flex_spacer(0.2)
-        .with_flex_child(disconnect_button, 1.0)
+    let device_function = DropdownSelect::new(Vector::from(DeviceFunction::my_options()))
+        .lens(lens_of(
+            move |state: &HantekState| state.get_device_function(),
+            move |state: &mut HantekState, new_value| state.set_device_function(new_value),
+        ))
+        .on_change(move |_, _, data_mut: &mut HantekState, _| data_mut.on_device_function())
+        .disabled_if(move |state: &HantekState, _| state.is_device_function_disabled());
+
+    Flex::column()
+        .with_flex_child(
+            Flex::row()
+                .with_flex_child(connect_button, 1.0)
+                .with_flex_spacer(0.2)
+                .with_flex_child(disconnect_button, 1.0)
+                .with_flex_spacer(0.2),
+            1.0,
+        )
+        .with_flex_spacer(0.4)
+        .with_flex_child(device_function, 1.0)
+        .cross_axis_alignment(CrossAxisAlignment::Start)
 }
 
 fn build_channel_panel(channel: usize) -> impl Widget<HantekState> {
