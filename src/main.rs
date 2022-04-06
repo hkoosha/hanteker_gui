@@ -1,4 +1,3 @@
-#![feature(iter_intersperse)]
 #![windows_subsystem = "windows"]
 
 use std::collections::VecDeque;
@@ -14,23 +13,28 @@ use hanteker_lib::device::cfg::*;
 use log::{debug, error, info, trace};
 use pretty_env_logger::formatted_builder;
 
-use crate::dev::{handler_thread, DevCommand};
+use crate::comm::{DevCommand, DevCommandResult, TextMessage};
+use crate::dev::handler_thread;
 use crate::widget::f32_formatter::float_text_unrestricted;
 use crate::widget::label::{label, label_c, label_ct};
 use crate::widget::scope::ScopeGraph;
+use crate::widget::usize_formatter::usize_text_unrestricted;
 use crate::widget::{lens_of, t, tt};
 
+mod comm;
 mod dev;
 mod widget;
 
 #[derive(Clone)]
-pub struct HantekState {
-    messages: VecDeque<String>,
+pub(crate) struct HantekState {
+    messages: VecDeque<TextMessage>,
     connected: bool,
     initializing: bool,
     cfg: HantekConfig,
     tx: Sender<DevCommand>,
-    rx: Arc<Receiver<Result<(), String>>>,
+    rx: Arc<Receiver<Result<DevCommandResult, String>>>,
+    capture: Option<Vec<u8>>,
+    num_captures: usize,
 }
 
 impl Data for HantekState {
@@ -43,7 +47,7 @@ impl Data for HantekState {
 }
 
 impl HantekState {
-    fn new(rx: Sender<DevCommand>, tx: Arc<Receiver<Result<(), String>>>) -> Self {
+    fn new(rx: Sender<DevCommand>, tx: Arc<Receiver<Result<DevCommandResult, String>>>) -> Self {
         Self {
             cfg: HantekConfig::new(2),
             messages: VecDeque::new(),
@@ -51,27 +55,42 @@ impl HantekState {
             initializing: true,
             tx: rx,
             rx: tx,
+            capture: None,
+            num_captures: 1024,
         }
     }
 
-    fn message(&mut self, message: impl Into<String>) {
-        // self.messages.pop_front();
-        self.messages.push_back(message.into());
+    fn message_info(&mut self, message: impl Into<String>) {
+        let txt = TextMessage::info(message);
+        info!("[UI][INFO] {}", txt.msg);
+        self.messages.push_back(txt);
+    }
+
+    fn message_error(&mut self, message: impl Into<String>) {
+        let txt = TextMessage::error(message);
+        info!("[UI][ERROR] {}", txt.msg);
+        self.messages.push_back(txt);
     }
 
     fn get_messages(&self) -> String {
         // TODO make rev() on iter work.
         let len = self.messages.len();
-        let mut vec = self
+        let vec = self
             .messages
             .iter()
             .cloned()
             .zip((0..len).into_iter())
-            .map(|(s, i)| format!("{}: {}", i, s))
-            .intersperse("\n".to_string())
+            .map(|(s, i)| format!("{}:\t [{}]\t {}", i, s.severity, s.msg))
+            // .intersperse("\n".to_string())
             .collect::<Vec<String>>();
-        vec.reverse();
-        vec.into_iter().collect()
+        let mut intersperse = Vec::with_capacity(len * 2);
+        for line in vec {
+            intersperse.push(line);
+            intersperse.push("\n".to_string());
+        }
+        intersperse.pop();
+        intersperse.reverse();
+        intersperse.into_iter().collect()
     }
 
     // ------------
@@ -86,15 +105,15 @@ impl HantekState {
 
         self.initializing = false;
 
-        self.message("disconnecting");
+        self.message_info("disconnecting");
         self.tx.send(DevCommand::Disconnect).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("disconnected");
+                self.message_info("disconnected");
                 self.connected = false;
                 self.messages.clear();
             }
-            Err(error) => self.message(error),
+            Err(error) => self.message_error(error),
         };
     }
 
@@ -102,7 +121,7 @@ impl HantekState {
         let my_name = "connect()";
         trace!("UI => {}", my_name);
 
-        self.message("connecting");
+        self.message_info("connecting");
         self.tx.send(DevCommand::Connect).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
@@ -110,16 +129,16 @@ impl HantekState {
                 self.initializing = false;
                 match self.try_connect() {
                     Ok(_) => {
-                        self.message("connected");
+                        self.message_info("connected");
                     }
                     Err(error) => {
                         self.connected = true;
                         self.initializing = false;
-                        self.message(error.to_string());
+                        self.message_error(error.to_string());
                     }
                 }
             }
-            Err(error) => self.message(error),
+            Err(error) => self.message_error(error),
         };
     }
 
@@ -190,6 +209,35 @@ impl HantekState {
         Ok(())
     }
 
+    fn capture(&mut self) {
+        let mut channels = Vec::with_capacity(2);
+        if self.cfg.enabled_channels[&1].unwrap() {
+            channels.push(1);
+        }
+        if self.cfg.enabled_channels[&2].unwrap() {
+            channels.push(2);
+        }
+
+        self.tx
+            .send(DevCommand::Capture(channels, self.num_captures))
+            .unwrap();
+
+        match self.rx.recv().unwrap() {
+            Ok(dev_command_result) => match dev_command_result {
+                DevCommandResult::EmptyResult => panic!("unexpected result"),
+                DevCommandResult::CaptureResult(capture) => {
+                    // Subtle bug: without putting something into messages,
+                    // drawing area widget won't be updated.
+                    self.message_info(format!("captured number of bytes: {}", capture.len()));
+                    self.capture = Some(capture);
+                }
+            },
+            Err(error) => {
+                self.message_error(error);
+            }
+        }
+    }
+
     // ------------
 
     fn on_device_function(&mut self) {
@@ -197,12 +245,12 @@ impl HantekState {
     }
 
     fn send_device_function(&mut self) -> anyhow::Result<()> {
-        let my_name = format!("send_device_function()");
+        let my_name = "send_device_function()".to_string();
         if self.initializing {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -212,7 +260,7 @@ impl HantekState {
         let device_function = self.cfg.device_function.as_ref().unwrap().clone();
         debug!("UI => {}::{}", my_name, device_function.my_to_string());
 
-        self.message(format!(
+        self.message_info(format!(
             "setting device_function={}",
             device_function.my_to_string(),
         ));
@@ -222,11 +270,11 @@ impl HantekState {
             .unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("device function set");
+                self.message_info("device function set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -260,7 +308,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else if self.is_running_disabled() {
@@ -278,13 +326,13 @@ impl HantekState {
         match self.rx.recv().unwrap() {
             Ok(_) => {
                 match new_status {
-                    RunningStatus::Start => self.message("running"),
-                    RunningStatus::Stop => self.message("stopped"),
+                    RunningStatus::Start => self.message_info("running"),
+                    RunningStatus::Stop => self.message_info("stopped"),
                 };
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -321,7 +369,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -334,7 +382,7 @@ impl HantekState {
             .clone();
         debug!("UI => {}::{}", my_name, coupling.my_to_string());
 
-        self.message(format!(
+        self.message_info(format!(
             "setting coupling={}, channel={}",
             coupling.my_to_string(),
             channel
@@ -345,11 +393,11 @@ impl HantekState {
             .unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("coupling set");
+                self.message_info("coupling set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -382,7 +430,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -392,7 +440,7 @@ impl HantekState {
         let probe = self.cfg.channel_probe[&channel].as_ref().unwrap().clone();
         debug!("UI => {}::{}", my_name, probe.my_to_string());
 
-        self.message(format!(
+        self.message_info(format!(
             "setting probe={}, channel={}",
             probe.my_to_string(),
             channel
@@ -401,11 +449,11 @@ impl HantekState {
         self.tx.send(DevCommand::Probe(channel, probe)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("probe set");
+                self.message_info("probe set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -438,7 +486,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -448,7 +496,7 @@ impl HantekState {
         let scale = self.cfg.channel_scale[&channel].as_ref().unwrap().clone();
         debug!("UI => {}::{}", my_name, scale.my_to_string());
 
-        self.message(format!(
+        self.message_info(format!(
             "setting scale={}, channel={}",
             scale.my_to_string(),
             channel
@@ -457,11 +505,11 @@ impl HantekState {
         self.tx.send(DevCommand::Scale(channel, scale)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("scale set");
+                self.message_info("scale set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -494,7 +542,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -504,16 +552,16 @@ impl HantekState {
         let offset = self.cfg.channel_offset[&channel].unwrap();
         debug!("UI => {}::{}", my_name, offset);
 
-        self.message(format!("setting offset={}, channel={}", offset, channel));
+        self.message_info(format!("setting offset={}, channel={}", offset, channel));
 
         self.tx.send(DevCommand::Offset(channel, offset)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("offset set");
+                self.message_info("offset set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -543,7 +591,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -553,7 +601,7 @@ impl HantekState {
         let enabled = self.cfg.enabled_channels[&channel].unwrap();
         debug!("UI => {}::{}", my_name, enabled);
 
-        self.message(format!(
+        self.message_info(format!(
             "setting channel status, channel={}, status={}",
             channel,
             match enabled {
@@ -567,11 +615,11 @@ impl HantekState {
             .unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("channel status set");
+                self.message_info("channel status set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -601,7 +649,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -611,7 +659,7 @@ impl HantekState {
         let enabled = self.cfg.channel_bandwidth_limit[&channel].unwrap();
         debug!("UI => {}::{}", my_name, enabled);
 
-        self.message(format!(
+        self.message_info(format!(
             "setting channel bandwidth limit, channel={}, limit={}",
             channel,
             match enabled {
@@ -623,11 +671,11 @@ impl HantekState {
         self.tx.send(DevCommand::BwLimit(channel, enabled)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("channel bandwidth limit configuration set");
+                self.message_info("channel bandwidth limit configuration set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -659,7 +707,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -669,16 +717,16 @@ impl HantekState {
         let scale = self.cfg.time_scale.as_ref().unwrap().clone();
         debug!("UI => {}::{}", my_name, scale.my_to_string());
 
-        self.message(format!("setting time_scale={}", scale.my_to_string()));
+        self.message_info(format!("setting time_scale={}", scale.my_to_string()));
 
         self.tx.send(DevCommand::TimeScale(scale)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("time scale set");
+                self.message_info("time scale set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -712,7 +760,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -722,16 +770,16 @@ impl HantekState {
         let time_offset = self.cfg.time_offset.unwrap();
         debug!("UI => {}::{}", my_name, time_offset);
 
-        self.message(format!("setting time_offset={}", time_offset));
+        self.message_info(format!("setting time_offset={}", time_offset));
 
         self.tx.send(DevCommand::TimeOffset(time_offset)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("time offset set");
+                self.message_info("time offset set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -761,7 +809,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -771,16 +819,16 @@ impl HantekState {
         let source = self.cfg.trigger_source_channel.unwrap();
         debug!("UI => {}::{}", my_name, source);
 
-        self.message(format!("setting trigger_source_channel={}", source));
+        self.message_info(format!("setting trigger_source_channel={}", source));
 
         self.tx.send(DevCommand::TriggerSource(source)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("trigger source set");
+                self.message_info("trigger source set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -810,7 +858,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -820,16 +868,16 @@ impl HantekState {
         let mode = self.cfg.trigger_mode.as_ref().unwrap().clone();
         debug!("UI => {}::{}", my_name, mode.my_to_string());
 
-        self.message(format!("setting trigger_mode={}", mode.my_to_string()));
+        self.message_info(format!("setting trigger_mode={}", mode.my_to_string()));
 
         self.tx.send(DevCommand::TriggerMode(mode)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("trigger mode set");
+                self.message_info("trigger mode set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -863,7 +911,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -873,16 +921,16 @@ impl HantekState {
         let level = self.cfg.trigger_level.unwrap();
         debug!("UI => {}::{}", my_name, level);
 
-        self.message(format!("setting trigger_level={}", level));
+        self.message_info(format!("setting trigger_level={}", level));
 
         self.tx.send(DevCommand::TriggerLevel(level)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("trigger level set");
+                self.message_info("trigger level set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -900,6 +948,33 @@ impl HantekState {
         !self.is_connected() || self.cfg.trigger_level.is_none()
     }
 
+    // -----------
+
+    fn on_num_captures(&mut self) {
+        let my_name = "on_num_captures()";
+        if self.initializing {
+            trace!("UI => {}, SKIPPED/INIT", my_name);
+            return;
+        } else {
+            trace!("UI => {}", my_name);
+        }
+
+        let num_captures = self.num_captures;
+        debug!("UI => {}::{}", my_name, num_captures);
+    }
+
+    fn get_num_captures(&self) -> usize {
+        self.num_captures
+    }
+
+    fn set_num_captures(&mut self, new_value: usize) {
+        self.num_captures = new_value;
+    }
+
+    fn is_num_captures_disabled(&self) -> bool {
+        !self.is_connected()
+    }
+
     // ------------
 
     fn on_awg_running(&mut self) {
@@ -912,7 +987,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -922,7 +997,7 @@ impl HantekState {
         let status = self.cfg.awg_running_status.as_ref().unwrap().clone();
         debug!("UI => {}::{}", my_name, status.my_to_string());
 
-        self.message(format!(
+        self.message_info(format!(
             "setting awg_running_status={}",
             status.my_to_string()
         ));
@@ -930,11 +1005,11 @@ impl HantekState {
         self.tx.send(DevCommand::AwgRunningStatus(status)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("awg running status set");
+                self.message_info("awg running status set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -968,7 +1043,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -978,16 +1053,16 @@ impl HantekState {
         let frequency = self.cfg.awg_frequency.unwrap();
         debug!("UI => {}::{}", my_name, frequency);
 
-        self.message(format!("setting awg_running_frequency={}", frequency));
+        self.message_info(format!("setting awg_running_frequency={}", frequency));
 
         self.tx.send(DevCommand::AwgFrequency(frequency)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("awg frequency set");
+                self.message_info("awg frequency set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -1017,7 +1092,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -1027,16 +1102,16 @@ impl HantekState {
         let amplitude = self.cfg.awg_amplitude.unwrap();
         debug!("UI => {}::{}", my_name, amplitude);
 
-        self.message(format!("setting awg_running_amplitude={}", amplitude));
+        self.message_info(format!("setting awg_running_amplitude={}", amplitude));
 
         self.tx.send(DevCommand::AwgAmplitude(amplitude)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("awg amplitude set");
+                self.message_info("awg amplitude set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -1066,7 +1141,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -1076,7 +1151,7 @@ impl HantekState {
         let awg_type = self.cfg.awg_type.as_ref().unwrap().clone();
         debug!("UI => {}::{}", my_name, awg_type.my_to_string());
 
-        self.message(format!(
+        self.message_info(format!(
             "setting awg_running_type={}",
             awg_type.my_to_string()
         ));
@@ -1084,11 +1159,11 @@ impl HantekState {
         self.tx.send(DevCommand::AwgType(awg_type)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("awg type set");
+                self.message_info("awg type set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -1122,7 +1197,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -1132,16 +1207,16 @@ impl HantekState {
         let offset = self.cfg.awg_offset.unwrap();
         debug!("UI => {}::{}", my_name, offset);
 
-        self.message(format!("setting awg_offset={}", offset));
+        self.message_info(format!("setting awg_offset={}", offset));
 
         self.tx.send(DevCommand::AwgOffset(offset)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("awg offset set");
+                self.message_info("awg offset set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -1171,7 +1246,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -1181,16 +1256,16 @@ impl HantekState {
         let duty = self.cfg.awg_duty_square.unwrap();
         debug!("UI => {}::{}", my_name, duty);
 
-        self.message(format!("setting awg_duty_square={}", duty));
+        self.message_info(format!("setting awg_duty_square={}", duty));
 
         self.tx.send(DevCommand::AwgDutySquare(duty)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("awg duty square set");
+                self.message_info("awg duty square set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -1220,7 +1295,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -1230,16 +1305,16 @@ impl HantekState {
         let duty = self.cfg.awg_duty_ramp.unwrap();
         debug!("UI => {}::{}", my_name, duty);
 
-        self.message(format!("setting awg_duty_ramp={}", duty));
+        self.message_info(format!("setting awg_duty_ramp={}", duty));
 
         self.tx.send(DevCommand::AwgDutyRamp(duty)).unwrap();
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("awg duty ramp set");
+                self.message_info("awg duty ramp set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -1269,7 +1344,7 @@ impl HantekState {
             trace!("UI => {}, SKIPPED/INIT", my_name);
             return Ok(());
         } else if !self.is_connected() {
-            self.message("not connected");
+            self.message_error("not connected");
             error!("UI => {}, SKIPPED/NOT_CONNECTED", my_name);
             bail!("not connected");
         } else {
@@ -1279,7 +1354,7 @@ impl HantekState {
         let duty = self.cfg.awg_duty_trap.as_ref().unwrap().clone();
         debug!("UI => {}::{}", my_name, duty);
 
-        self.message(format!(
+        self.message_info(format!(
             "setting awg_duty_trap={}/{}/{}",
             duty.high, duty.low, duty.rise
         ));
@@ -1289,11 +1364,11 @@ impl HantekState {
 
         match self.rx.recv().unwrap() {
             Ok(_) => {
-                self.message("awg duty trap set");
+                self.message_info("awg duty trap set");
                 Ok(())
             }
             Err(error) => {
-                self.message(error.clone());
+                self.message_error(error.clone());
                 bail!(error);
             }
         }
@@ -1546,6 +1621,28 @@ fn build_scope_panel() -> impl Widget<HantekState> {
                 .on_change(|_, _, data_mut: &mut HantekState, _| data_mut.on_trigger_level()),
             1.0,
         );
+    let num_captures = Flex::row()
+        .with_flex_child(label("Captures"), 1.0)
+        .with_flex_child(
+            usize_text_unrestricted()
+                .lens(lens_of(
+                    |state: &HantekState| state.get_num_captures(),
+                    |state: &mut HantekState, new_value| state.set_num_captures(new_value),
+                ))
+                .disabled_if(|state: &HantekState, _| state.is_num_captures_disabled())
+                .on_change(|_, _, data_mut: &mut HantekState, _| {
+                    data_mut.on_num_captures();
+                }),
+            1.0,
+        );
+    let action_panel = Flex::row()
+        .with_flex_child(label(" "), 1.0)
+        .with_flex_child(
+            Button::new("Capture")
+                .on_click(|_, state: &mut HantekState, _| state.capture())
+                .disabled_if(|state: &HantekState, _| !state.is_connected()),
+            1.0,
+        );
 
     Flex::column()
         .with_flex_child(label_c("Scope"), 1.0)
@@ -1560,6 +1657,10 @@ fn build_scope_panel() -> impl Widget<HantekState> {
         .with_flex_child(trigger_mode, 1.0)
         .with_flex_spacer(0.1)
         .with_flex_child(trigger_level, 1.0)
+        .with_flex_spacer(0.1)
+        .with_flex_child(num_captures, 1.0)
+        .with_flex_spacer(0.1)
+        .with_flex_child(action_panel, 1.0)
         .with_flex_spacer(0.1)
 }
 

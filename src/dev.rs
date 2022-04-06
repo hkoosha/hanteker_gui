@@ -3,10 +3,10 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
-use hanteker_lib::device::cfg::{
-    AwgType, Coupling, DeviceFunction, Probe, RunningStatus, Scale, TimeScale, TriggerMode,
-};
+use hanteker_lib::device::cfg::RunningStatus;
 use hanteker_lib::models::hantek2d42::Hantek2D42;
+
+use crate::comm::{DevCommand, DevCommandResult};
 
 fn exit() -> ! {
     std::process::exit(0);
@@ -17,39 +17,7 @@ fn exit_err(message: String) -> ! {
     std::process::exit(0);
 }
 
-#[derive(Debug)]
-pub(crate) enum DevCommand {
-    Connect,
-    Disconnect,
-
-    DeviceFunction(DeviceFunction),
-
-    ScopeRunning(RunningStatus),
-
-    ChannelEnable(usize, bool),
-    Coupling(usize, Coupling),
-    Probe(usize, Probe),
-    Scale(usize, Scale),
-    Offset(usize, f32),
-    BwLimit(usize, bool),
-
-    TimeScale(TimeScale),
-    TimeOffset(f32),
-    TriggerSource(usize),
-    TriggerMode(TriggerMode),
-    TriggerLevel(f32),
-
-    AwgRunningStatus(RunningStatus),
-    AwgFrequency(f32),
-    AwgAmplitude(f32),
-    AwgType(AwgType),
-    AwgOffset(f32),
-    AwgDutySquare(f32),
-    AwgDutyRamp(f32),
-    AwgDutyTrap(f32, f32, f32),
-}
-
-fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
+fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<DevCommandResult, String>>) {
     let context = match libusb::Context::new() {
         Ok(context) => context,
         // TODO show a popup window about failure and then quit.
@@ -71,7 +39,9 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                             Ok(hantek) => {
                                 device = Some(hantek);
                                 match device.as_mut().unwrap().usb.claim() {
-                                    Ok(_) => tx.send(Ok(())).unwrap_or_else(|_| exit()),
+                                    Ok(_) => tx
+                                        .send(Ok(DevCommandResult::EmptyResult))
+                                        .unwrap_or_else(|_| exit()),
                                     Err(error) => {
                                         tx.send(Err(format!(
                                             "failed to claim device: {}",
@@ -94,7 +64,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     }
                     DevCommand::Disconnect => {
                         if device.is_none() {
-                            tx.send(Ok(())).unwrap_or_else(|_| exit());
+                            tx.send(Ok(DevCommandResult::EmptyResult))
+                                .unwrap_or_else(|_| exit());
                             continue;
                         }
                         device
@@ -104,7 +75,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                             .release()
                             .expect("could not disconnect");
                         device = None;
-                        tx.send(Ok(())).unwrap_or_else(|_| exit());
+                        tx.send(Ok(DevCommandResult::EmptyResult))
+                            .unwrap_or_else(|_| exit());
                         continue;
                     }
                     _ => {}
@@ -125,12 +97,13 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::Coupling(channel, coupling) => {
                         match device.set_channel_coupling(channel, coupling.clone()) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!("failed to set channel coupling, channel={}, coupling={}, error={}",
                                                     channel, coupling.my_to_string(), error.my_to_string())))
-                                  .unwrap_or_else(|_| exit());
+                                    .unwrap_or_else(|_| exit());
                             }
                         }
                     }
@@ -141,7 +114,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                         };
                         match result {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -156,7 +130,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::Probe(channel, probe) => {
                         match device.set_channel_probe(channel, probe.clone()) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -172,7 +147,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::Scale(channel, scale) => {
                         match device.set_channel_scale(channel, scale.clone()) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -188,7 +164,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::Offset(channel, offset) => {
                         match device.set_channel_offset_with_auto_adjustment(channel, offset) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -208,7 +185,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                         };
                         match result {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -223,7 +201,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::TimeScale(time_scale) => {
                         match device.set_time_scale(time_scale.clone()) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -238,7 +217,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::TimeOffset(offset) => {
                         match device.set_time_offset_with_auto_adjustment(offset) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -253,7 +233,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::TriggerSource(channel) => {
                         match device.set_trigger_source(channel) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -267,7 +248,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     }
                     DevCommand::TriggerMode(mode) => match device.set_trigger_mode(mode.clone()) {
                         Ok(_) => {
-                            tx.send(Ok(())).unwrap_or_else(|_| exit());
+                            tx.send(Ok(DevCommandResult::EmptyResult))
+                                .unwrap_or_else(|_| exit());
                         }
                         Err(error) => {
                             tx.send(Err(format!(
@@ -281,7 +263,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::TriggerLevel(level) => {
                         match device.set_trigger_level_with_auto_adjustment(level) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -300,7 +283,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                         };
                         match running_result {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -318,7 +302,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                         };
                         match running_result {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -332,7 +317,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::AwgFrequency(frequency) => {
                         match device.set_awg_frequency(frequency) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -346,7 +332,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::AwgAmplitude(amplitude) => {
                         match device.set_awg_amplitude(amplitude) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -359,7 +346,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     }
                     DevCommand::AwgType(awg_type) => match device.set_awg_type(awg_type) {
                         Ok(_) => {
-                            tx.send(Ok(())).unwrap_or_else(|_| exit());
+                            tx.send(Ok(DevCommandResult::EmptyResult))
+                                .unwrap_or_else(|_| exit());
                         }
                         Err(error) => {
                             tx.send(Err(format!(
@@ -371,7 +359,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     },
                     DevCommand::AwgOffset(offset) => match device.set_awg_offset(offset) {
                         Ok(_) => {
-                            tx.send(Ok(())).unwrap_or_else(|_| exit());
+                            tx.send(Ok(DevCommandResult::EmptyResult))
+                                .unwrap_or_else(|_| exit());
                         }
                         Err(error) => {
                             tx.send(Err(format!(
@@ -384,7 +373,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::AwgDutySquare(duty_square) => {
                         match device.set_awg_duty_square(duty_square) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -398,7 +388,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::AwgDutyRamp(duty_ramp) => match device.set_awg_duty_ramp(duty_ramp)
                     {
                         Ok(_) => {
-                            tx.send(Ok(())).unwrap_or_else(|_| exit());
+                            tx.send(Ok(DevCommandResult::EmptyResult))
+                                .unwrap_or_else(|_| exit());
                         }
                         Err(error) => {
                             tx.send(Err(format!(
@@ -411,7 +402,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::AwgDutyTrap(high, low, rise) => {
                         match device.set_awg_duty_trap(high, low, rise) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -425,7 +417,8 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                     DevCommand::DeviceFunction(device_function) => {
                         match device.set_device_function(device_function) {
                             Ok(_) => {
-                                tx.send(Ok(())).unwrap_or_else(|_| exit());
+                                tx.send(Ok(DevCommandResult::EmptyResult))
+                                    .unwrap_or_else(|_| exit());
                             }
                             Err(error) => {
                                 tx.send(Err(format!(
@@ -436,13 +429,36 @@ fn handle(rx: Receiver<DevCommand>, tx: Sender<Result<(), String>>) {
                             }
                         }
                     }
+                    DevCommand::Capture(channels, num_samples) => {
+                        if channels.is_empty() {
+                            tx.send(Err(format!("no channel selected for capture",)))
+                                .unwrap_or_else(|_| exit());
+                        } else {
+                            match device.capture(&channels, num_samples) {
+                                Ok(capture) => {
+                                    tx.send(Ok(DevCommandResult::CaptureResult(capture)))
+                                        .unwrap_or_else(|_| exit());
+                                }
+                                Err(error) => {
+                                    tx.send(Err(format!(
+                                        "failed to capture, error={}",
+                                        error.my_to_string()
+                                    )))
+                                    .unwrap_or_else(|_| exit());
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-pub(crate) fn handler_thread() -> (Sender<DevCommand>, Receiver<Result<(), String>>) {
+pub(crate) fn handler_thread() -> (
+    Sender<DevCommand>,
+    Receiver<Result<DevCommandResult, String>>,
+) {
     let (tx0, rx0) = mpsc::channel();
     let (tx1, rx1) = mpsc::channel();
     thread::spawn(move || handle(rx0, tx1));

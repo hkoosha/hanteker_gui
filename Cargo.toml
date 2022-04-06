@@ -15,21 +15,19 @@ strum_macros = "0.24"
 
 libusb = "0.3"
 
-hanteker_lib = { version = "0.3.0", features = ["gui"] }
-# hanteker_lib = { path = "../hanteker/hanteker_lib", version = "0.3.0", features = ["gui"] }
+hanteker_lib = { version = "0.4.0", features = ["gui"] }
+# hanteker_lib = { path = "../hanteker/hanteker_lib", version = "0.4.0", features = ["gui"] }
 
 #tracing-subscriber = "0.3"
 #eframe = "0.17"
 
-# druid = "0.7"
-# druid = { git = "https://github.com/linebender/druid.git", features = ["im"] }
 druid-widget-nursery = { git = "https://github.com/linebender/druid-widget-nursery" }
-# plotters-druid = "0.2"
 
 [patch.crates-io.druid]
 git = "https://github.com/linebender/druid"
 rev = "fc05e965c85fced8720c655685e02478e0530e94"
 
+# So that hanteker_lib pulls in proper version of druid
 [dependencies.druid]
 git = "https://github.com/linebender/druid"
 rev = "fc05e965c85fced8720c655685e02478e0530e94"

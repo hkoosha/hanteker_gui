@@ -3,6 +3,7 @@ use druid::{Lens, LocalizedString};
 pub(crate) mod f32_formatter;
 pub(crate) mod label;
 pub(crate) mod scope;
+pub(crate) mod usize_formatter;
 
 pub fn t<T>(text: &'static str) -> LocalizedString<T> {
     tt(text, text)

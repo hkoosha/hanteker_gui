@@ -693,9 +693,9 @@ dependencies = [
 
 [[package]]
 name = "hanteker_lib"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68ada940cb3c631692aae52f303363a2ae7e0c1c4fde8e86b1914bfe7f21e8f3"
+checksum = "794ee6c94651dca984005f880d836ac128b64ad9356155eaab4a6afa1271162c"
 dependencies = [
  "druid",
  "libusb",
